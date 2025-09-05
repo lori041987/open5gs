@@ -41,7 +41,9 @@ typedef struct ogs_app_context_s {
     } logger_default;
 
     struct {
-        const char *file;
+        const char *file;          /* Separate logging file */
+        const char *unified_file;  /* Unified logging file */
+        bool unified_logging;      /* true = unified, false = separate */
         const char *level;
         const char *domain;
         ogs_log_ts_e timestamp;

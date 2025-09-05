@@ -1,7 +1,9 @@
 logger:
   file:
     path: @localstatedir@/log/open5gs/scp.log
-#  level: info   # fatal|error|warn|info(default)|debug|trace
+  level: debug   # fatal|error|warn|info(default)|debug|trace
+  unified_logging: true
+  unified_file: @localstatedir@/log/open5gs/open5gs-unified.log
 
 global:
   max:

@@ -45,6 +45,30 @@ int ogs_app_initialize(
     ogs_app_config_init();
     ogs_app()->version = version;
 
+    /* Extract network function name from argv[0] for unified logging */
+    if (argv && argv[0]) {
+        const char *prog_name = strrchr(argv[0], '/');
+        if (prog_name) {
+            prog_name++; /* Skip the '/' */
+        } else {
+            prog_name = argv[0]; /* No path, use whole string */
+        }
+        
+        /* Extract network function from names like "open5gs-amfd" -> "amf" */
+        if (strncmp(prog_name, "open5gs-", 8) == 0) {
+            const char *nf_name = prog_name + 8;
+            /* Remove trailing 'd' if present (amfd -> amf) */
+            static char nf_name_buf[32];
+            strncpy(nf_name_buf, nf_name, sizeof(nf_name_buf) - 1);
+            nf_name_buf[sizeof(nf_name_buf) - 1] = '\0';
+            size_t len = strlen(nf_name_buf);
+            if (len > 0 && nf_name_buf[len - 1] == 'd') {
+                nf_name_buf[len - 1] = '\0';
+            }
+            ogs_log_set_network_function(nf_name_buf);
+        }
+    }
+
     /**************************************************************************
      * Stage 1 : Command Line Options
      */
@@ -100,7 +124,31 @@ int ogs_app_initialize(
     if (optarg.log_file)
         ogs_app()->logger.file = optarg.log_file;
 
-    if (ogs_app()->logger.file) {
+    /* Allow quick override via environment for unified logging */
+    if (ogs_env_get("OPEN5GS_UNIFIED_LOGGING")) {
+        const char *v = ogs_env_get("OPEN5GS_UNIFIED_LOGGING");
+        if (!strcmp(v, "1") || !strcmp(v, "true") || !strcmp(v, "TRUE") || !strcmp(v, "True")) {
+            ogs_app()->logger.unified_logging = true;
+            const char *p = ogs_env_get("OPEN5GS_UNIFIED_FILE");
+            if (p && *p) ogs_app()->logger.unified_file = p;
+            if (!ogs_app()->logger.unified_file)
+                ogs_app()->logger.unified_file = "/var/log/open5gs/open5gs-unified.log";
+        }
+    }
+
+    /* Configure file logging based on mode (mutually exclusive) */
+    if (ogs_app()->logger.unified_logging) {
+        if (ogs_app()->logger.unified_file) {
+            if (ogs_log_add_file(ogs_app()->logger.unified_file) == NULL) {
+                ogs_fatal("cannot open unified log file : %s", 
+                        ogs_app()->logger.unified_file);
+                return OGS_ERROR;
+            }
+        } else {
+            ogs_fatal("unified_logging is enabled but no unified_file specified");
+            return OGS_ERROR;
+        }
+    } else if (ogs_app()->logger.file) {
         if (ogs_log_add_file(ogs_app()->logger.file) == NULL) {
             ogs_fatal("cannot open log file : %s", 
                     ogs_app()->logger.file);
@@ -143,15 +191,18 @@ int ogs_app_initialize(
 
         ogs_info("Configuration: '%s'", ogs_app()->file);
 
-        if (ogs_app()->logger.file) {
+        if (ogs_app()->logger.unified_logging) {
+            if (ogs_app()->logger.unified_file)
+                ogs_info("Unified Logging: '%s'", ogs_app()->logger.unified_file);
+        } else if (ogs_app()->logger.file) {
             ogs_info("File Logging: '%s'", ogs_app()->logger.file);
-
-            if (ogs_app()->logger.level)
-                ogs_info("LOG-LEVEL: '%s'", ogs_app()->logger.level);
-
-            if (ogs_app()->logger.domain)
-                ogs_info("LOG-DOMAIN: '%s'", ogs_app()->logger.domain);
         }
+
+        if (ogs_app()->logger.level)
+            ogs_info("LOG-LEVEL: '%s'", ogs_app()->logger.level);
+
+        if (ogs_app()->logger.domain)
+            ogs_info("LOG-DOMAIN: '%s'", ogs_app()->logger.domain);
     }
 
     /**************************************************************************
@@ -270,6 +321,23 @@ static int context_prepare(void)
 
 static int context_validation(void)
 {
+    /* Logger configuration validation */
+    if (ogs_app()->logger.unified_logging) {
+        if (!ogs_app()->logger.unified_file) {
+            ogs_error("unified_logging is true but unified_file not specified");
+            return OGS_ERROR;
+        }
+        if (ogs_app()->logger.file) {
+            ogs_warn("unified_logging enabled; ignoring separate log file: %s",
+                    ogs_app()->logger.file);
+        }
+    } else {
+        if (ogs_app()->logger.unified_file) {
+            ogs_warn("separate logging mode; ignoring unified_file: %s",
+                    ogs_app()->logger.unified_file);
+        }
+    }
+
     return OGS_OK;
 }
 
@@ -355,6 +423,10 @@ static int parse_config(void)
                 } else if (!strcmp(logger_key, "domain")) {
                     ogs_app()->logger.domain =
                         ogs_yaml_iter_value(&logger_iter);
+                } else if (!strcmp(logger_key, "unified_logging")) {
+                    ogs_app()->logger.unified_logging = ogs_yaml_iter_bool(&logger_iter);
+                } else if (!strcmp(logger_key, "unified_file")) {
+                    ogs_app()->logger.unified_file = ogs_yaml_iter_value(&logger_iter);
                 }
             }
         } else if (!strcmp(root_key, "global")) {

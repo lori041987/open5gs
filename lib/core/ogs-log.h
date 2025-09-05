@@ -97,6 +97,7 @@ int ogs_log_config_domain(const char *domain, const char *level);
 
 void ogs_log_set_mask_level(const char *mask, ogs_log_level_e level);
 void ogs_log_set_timestamp(ogs_log_ts_e ts_default, ogs_log_ts_e ts_file);
+void ogs_log_set_network_function(const char *name);
 
 void ogs_log_vprintf(ogs_log_level_e level, int id,
     ogs_err_t err, const char *file, int line, const char *func,

@@ -95,6 +95,8 @@ static OGS_LIST(log_list);
 static OGS_POOL(domain_pool, ogs_log_domain_t);
 static OGS_LIST(domain_list);
 
+static const char *network_function_name = NULL;
+
 static ogs_log_t *add_log(ogs_log_type_e type);
 static int file_cycle(ogs_log_t *log);
 
@@ -398,6 +400,11 @@ int ogs_log_config_domain(const char *domain, const char *level)
     return OGS_OK;
 }
 
+void ogs_log_set_network_function(const char *name)
+{
+    network_function_name = name;
+}
+
 void ogs_log_vprintf(ogs_log_level_e level, int id,
     ogs_err_t err, const char *file, int line, const char *func,
     int content_only, const char *format, va_list ap)
@@ -581,10 +588,20 @@ static char *log_timestamp(char *buf, char *last,
 static char *log_domain(char *buf, char *last,
         const char *name, int use_color)
 {
-    buf = ogs_slprintf(buf, last, "[%s%s%s] ",
-            use_color ? TA_FGC_YELLOW : "",
-            name,
-            use_color ? TA_NOR : "");
+    if (network_function_name) {
+        buf = ogs_slprintf(buf, last, "[%s%s%s][%s%s%s] ",
+                use_color ? TA_FGC_YELLOW : "",
+                network_function_name,
+                use_color ? TA_NOR : "",
+                use_color ? TA_FGC_YELLOW : "",
+                name,
+                use_color ? TA_NOR : "");
+    } else {
+        buf = ogs_slprintf(buf, last, "[%s%s%s] ",
+                use_color ? TA_FGC_YELLOW : "",
+                name,
+                use_color ? TA_NOR : "");
+    }
 
     return buf;
 }

@@ -2,7 +2,9 @@ db_uri: mongodb://localhost/open5gs
 logger:
   file:
     path: @localstatedir@/log/open5gs/hss.log
-#  level: info   # fatal|error|warn|info(default)|debug|trace
+  level: debug   # fatal|error|warn|info(default)|debug|trace
+  unified_logging: true
+  unified_file: @localstatedir@/log/open5gs/open5gs-unified.log
 
 global:
   max:
