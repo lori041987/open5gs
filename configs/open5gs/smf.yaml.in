@@ -47,7 +47,19 @@ smf:
     - 2001:4860:4860::8888
     - 2001:4860:4860::8844
   mtu: 1400
-#  p-cscf:
+  p-cscf:   # This is the address included in the IMS PDU session accept message under the P-CSCF IPv6 Address. If it is not included, the UE will release the IMS PDU session
+    - 2001:db8:cafe::10
+    # Need to manually set ipv6 p-cscf address on ogstun interface,
+    # sudo ip -6 addr add 2001:db8:cafe::10/48 dev ogstun
+    # sysctl -w net.ipv6.conf.all.forwarding=1
+    # TCP 5060 (SIP)
+    # ip6tables -A INPUT -i ogstun -p tcp --dport 5060 -j ACCEPT
+    # TCP 5061 (SIP over TLS)
+    # ip6tables -A INPUT -i ogstun -p tcp --dport 5061 -j ACCEPT
+    # UDP 5060
+    # ip6tables -A INPUT -i ogstun -p udp --dport 5060 -j ACCEPT
+    # UDP 5061
+    # ip6tables -A INPUT -i ogstun -p udp --dport 5061 -j ACCEPT
 #    - 127.0.0.1
 #    - ::1
 #  ctf:

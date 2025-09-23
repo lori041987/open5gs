@@ -35,12 +35,16 @@ runcmd:
 This removes all existing cloud users and allows only root user and sets a password
 {: .notice--warning}
 
-#### 3. Install following packages
+#### 3. Install following packages (Please run the following as the root user.)
 
 ```
-$ apt update && apt upgrade -y && apt install -y mysql-server tcpdump screen ntp ntpdate git-core dkms gcc flex bison libmysqlclient-dev make \
-libssl-dev libcurl4-openssl-dev libxml2-dev libpcre3-dev bash-completion g++ autoconf rtpproxy libmnl-dev libsctp-dev ipsec-tools libradcli-dev \
+$ apt update 
+$ (Skip) apt upgrade
+$ apt install -y mysql-server tcpdump screen ntp ntpdate git dkms gcc flex bison libmysqlclient-dev make \
+libssl-dev libcurl4-openssl-dev libxml2-dev libpcre3-dev bash-completion g++ autoconf rtpproxy libmnl-dev libsctp-dev libradcli-dev \
 libradcli4
+$ apt install libxml2-dev libmysqlclient-dev libpcre3-dev libsctp-dev libcurl4-openssl-dev
+
 ```
 
 #### 4. Clone Kamailio repository and checkout 5.3 version of repository
@@ -50,17 +54,29 @@ $ mkdir -p /usr/local/src/
 $ cd /usr/local/src/
 $ git clone https://github.com/herlesupreeth/kamailio
 $ cd kamailio
-$ git checkout -b 5.3 origin/5.3
+
+// (Skip) Below command creates a new local branch named 5.3 starting from the remote branch origin/5.3,
+  switches to it, and sets it to track origin/5.3 so git pull/push work against that branch.
+$ (Skip) git checkout -b 5.3 origin/5.3
+
+git fetch origin
+git checkout 5.3
+
+// (Optional) Show tag with date
+git for-each-ref --sort=creatordate --format '%(creatordate:short) %(refname:short)' refs/tags
+
 ```
 
 #### 5. Generate build config files
 
 ```
 $ cd /usr/local/src/kamailio
+
+// In order to create src/modules.lst
 $ make cfg
 ```
 
-#### 6. Enable MySQL module and all required IMS modules. 
+#### (Already included in patch, skip it) 6. Enable MySQL module and all required IMS modules. 
 
 Edit modules.lst file present at /usr/local/src/kamailio/src
 {: .notice--info}
@@ -99,6 +115,12 @@ modules_configured:=1
 
 ```
 $ cd /usr/local/src/kamailio
+
+// Test run patch
+patch --dry-run --verbose -p1 -R  < kamailio_fix_compile_error_250917.patch 
+// Run patch 
+patch --verbose -p1 -R  < kamailio_fix_compile_error_250917.patch 
+
 $ export RADCLI=1
 $ make Q=0 all | tee make_all.txt
 $ make install | tee make_install.txt
@@ -134,6 +156,18 @@ In case you set the PREFIX variable in `make cfg` command, then replace /usr/loc
 
 #### 8. Populate MySQL database using `kamctlrc` command
 
+```
+You can change /bin/sh to point from dash to /bin/bash so that the kamdbctl output will be colorful.
+
+Original:
+[root@75N0-01N0SA-sled2-open5gs kamailio]# ls -la /bin/sh
+lrwxrwxrwx 1 root root 4 Mar 23  2022 /bin/sh -> dash
+
+After changed:
+[root@75N0-01N0SA-sled2-open5gs kamailio]# ls -la /bin/sh
+lrwxrwxrwx 1 root root 9 Sep 17 10:46 /bin/sh -> /bin/bash
+```
+
 Edit SIP_DOMAIN and DBENGINE in the `/usr/local/etc/kamailio/kamctlrc` configuration file (Used by kamctl and kamdbctl tools).
 
 Set the SIP_DOMAIN to your SIP service domain (or IP address if you don't have a DNS hostname associated with your SIP service).
@@ -146,6 +180,12 @@ SIP_DOMAIN=ims.mnc001.mcc001.3gppnetwork.org
 DBENGINE=MYSQL
 ```
 
+```
+# WNC current setting
+SIP_DOMAIN=ims.mnc011.mcc466.3gppnetwork.org
+DBENGINE=MYSQL
+```
+
 You can change other values in kamctlrc file. Once you are done updating kamctlrc file, run the script to create the database used by Kamailio:
 
 ```
@@ -154,6 +194,38 @@ $ kamdbctl create
 
 When prompted for mysql root user password enter the root password if its is set or else leave it blank i.e. Press Enter
 {: .notice--info}
+
+- Possible error 1:
+  - MySQL server's default character set is not compatible with Kamailio's database requirements. Kamailio needs a specific character set (eg. utf8) to properly handle SIP messages and IMS data.
+
+```bash
+# Error message
+# kamdbctl create
+  MySQL password for root: 
+  INFO: test server charset
+  WARNING: Your current default mysql characters set cannot be used to create DB. Please choice another one from the 
+  following list:
+```
+
+- Solution
+  - Change charset in /usr/local/etc/kamailio/kamctlrc
+    - Uncomment CHARSET="latin1"
+
+- Possible error 2:
+  - The database already exists, possibly because "kamdbctl create" was run before.
+
+```bash
+# Error message
+# kamdbctl create
+MySQL password for root: 
+INFO: creating database kamailio ...
+ERROR 1007 (HY000) at line 1: Can't create database 'kamailio'; database exists
+```
+- Soltion
+  - Drop the old schema: 
+    - mysql -u root -p -e "DROP DATABASE IF EXISTS kamailio;"
+  - Remove the service accounts so grants can be recreated:
+    - mysql -u root -p -e "DROP USER IF EXISTS 'kamailio'@'localhost','kamailioro'@'localhost'; FLUSH PRIVILEGES;"
 
 check database manually;
 ```
@@ -197,6 +269,8 @@ $ systemctl restart rtpproxy
 
 #### 10. Edit configuration file to fit your requirements for the VoIP platform:
 
+- Verified pass kamailio.cfg : Please refer to example verified_add_log_kamailio.cfg
+
 You have to edit the /usr/local/etc/kamailio/kamailio.cfg configuration file.
 {: .notice--info}
 
@@ -214,15 +288,34 @@ auto_aliases=no
 (uncomment this line and enter the DNS domain created above)
 alias="ims.mnc001.mcc001.3gppnetwork.org"
 
+// WNC current setting
+alias="ims.mnc011.mcc466.3gppnetwork.org"
+
+
 (uncomment this line, 10.4.128.21 is the internal IP and 172.24.15.30 is the Public/Floating IP)
 listen=udp:10.4.128.21:5060 advertise 172.24.15.30:5060
 listen=tcp:10.4.128.21:5060 advertise 172.24.15.30:5060
+
+// WNC current setting
+// Where 2001:db8:cafe::10 is p-cscf address set in smf.yaml and interface ogstun
+listen=udp:10.45.0.1:5060 advertise 192.168.6.168:5060
+listen=tcp:10.45.0.1:5060 advertise 192.168.6.168:5060
+listen=udp:[2001:db8:cafe::10]:5060
+listen=tcp:[2001:db8:cafe::10]:5060
 
 (Further down, we will need to modify the rtpproxy_sock value to match the CONTROL_SOCK option we set for RTPProxy in /etc/default/rtpproxy)
 modparam("rtpproxy", "rtpproxy_sock", "udp:127.0.0.1:7722")
 ```
 
 If you changed the password for the 'kamailio' user of MySQL, you have to update the value for 'DBURL' parameters.
+
+After running kamailio, we can run below command to check if kamailio listen on correct ports
+```
+netstat -tlnp | grep 5060
+tcp        0      0 10.45.0.1:5060          0.0.0.0:*               LISTEN      177938/kamailio     
+tcp6       0      0 2001:db8:cafe::10:5060  :::*                    LISTEN      177938/kamailio  
+```
+
 
 #### 11. The `init.d` script
 
@@ -280,8 +373,13 @@ Then you can start Kamailio using the following commands:
 $ systemctl start kamailio.service
 ```
 
-check running processes with: ps axw | egrep kamailio
-
+Check running processes with: 
+```
+ps axw | egrep kamailio
+systemctl status kamailio.service
+journalctl -xefu kamailio.service
+```
+By default, SIP-related log information should be saved in /var/log/syslog.
 
 #### 12. A quick check for the basic working of SIP server can be done as follows:
 
