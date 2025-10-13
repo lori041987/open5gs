@@ -43,9 +43,7 @@ smf:
       gateway: 2001:db8:cafe::1
   dns:
     - 8.8.8.8
-    - 8.8.4.4
     - 2001:4860:4860::8888
-    - 2001:4860:4860::8844
   mtu: 1400
   p-cscf:   # This is the address included in the IMS PDU session accept message under the P-CSCF IPv6 Address. If it is not included, the UE will release the IMS PDU session
     - 2001:db8:cafe::10
